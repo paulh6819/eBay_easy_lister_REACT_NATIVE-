@@ -521,6 +521,134 @@ async function createEbayListing(listing, photos) {
   }
 }
 
+/**
+ * Build book-specific eBay XML request with enhanced book item specifics
+ * @param {Object} bookListing - Book listing data
+ * @param {Array} photoUrls - Array of hosted photo URLs
+ * @returns {string} eBay XML request for books
+ */
+function buildEbayBookXMLRequest(bookListing, photoUrls) {
+  const conditionID = getEbayConditionID(bookListing.condition);
+  const categoryID = getEbayCategoryID(bookListing.category, 'BOOK_ITEM');
+  
+  // Build photo gallery XML
+  let pictureDetailsXml = '';
+  if (photoUrls && photoUrls.length > 0) {
+    const photoUrlsXml = photoUrls.map(url => `<PictureURL>${escapeXml(url)}</PictureURL>`).join('');
+    pictureDetailsXml = `
+      <PictureDetails>
+        ${photoUrlsXml}
+        <GalleryType>Gallery</GalleryType>
+      </PictureDetails>
+    `;
+  }
+  
+  // Build book-specific item specifics
+  let itemSpecificsXml = '';
+  const bookSpecifics = bookListing.item_specifics || {};
+  
+  const requiredBookSpecifics = {
+    'Book Title': bookSpecifics['Book Title'] || bookListing.title,
+    'Author': bookSpecifics['Author'] || 'Unknown',
+    'Format': bookSpecifics['Format'] || 'Hardcover',
+    'Language': bookSpecifics['Language'] || 'English',
+    'Topic': bookSpecifics['Topic'] || 'General',
+    'Publisher': bookSpecifics['Publisher'] || '',
+    'Publication Year': bookSpecifics['Publication Year'] || '',
+    'ISBN': bookSpecifics['ISBN'] || ''
+  };
+
+  // Add optional book specifics if provided
+  const optionalBookSpecifics = {
+    'Edition': bookSpecifics['Edition'] || '',
+    'Series': bookSpecifics['Series'] || '',
+    'Reading Level': bookSpecifics['Reading Level'] || 'Adult',
+    'Number of Pages': bookSpecifics['Number of Pages'] || '',
+    'Special Features': bookSpecifics['Special Features'] || ''
+  };
+
+  // Combine all specifics
+  const allSpecifics = { ...requiredBookSpecifics, ...optionalBookSpecifics };
+
+  // Build XML for non-empty specifics
+  const specificItems = Object.entries(allSpecifics)
+    .filter(([key, value]) => value && value.toString().trim() !== '')
+    .map(([name, value]) => `
+      <NameValueList>
+        <Name>${escapeXml(name)}</Name>
+        <Value>${escapeXml(value.toString())}</Value>
+      </NameValueList>
+    `).join('');
+
+  if (specificItems) {
+    itemSpecificsXml = `
+      <ItemSpecifics>
+        ${specificItems}
+      </ItemSpecifics>
+    `;
+  }
+
+  // Build shipping details - Media Mail is standard for books
+  const shippingXml = `
+    <ShippingDetails>
+      <ShippingType>Flat</ShippingType>
+      <ShippingServiceOptions>
+        <ShippingServicePriority>1</ShippingServicePriority>
+        <ShippingService>USPSMedia</ShippingService>
+        <ShippingServiceCost>0.00</ShippingServiceCost>
+        <FreeShipping>true</FreeShipping>
+      </ShippingServiceOptions>
+      <ShippingServiceOptions>
+        <ShippingServicePriority>2</ShippingServicePriority>
+        <ShippingService>USPSPriority</ShippingService>
+        <ShippingServiceCost>8.99</ShippingServiceCost>
+      </ShippingServiceOptions>
+    </ShippingDetails>
+  `;
+
+  const xmlRequest = `<?xml version="1.0" encoding="utf-8"?>
+<AddItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials>
+    <eBayAuthToken>${process.env.EBAY_USER_TOKEN}</eBayAuthToken>
+  </RequesterCredentials>
+  <Item>
+    <Title>${escapeXml(bookListing.title)}</Title>
+    <Description><![CDATA[${bookListing.description || ''}]]></Description>
+    <PrimaryCategory>
+      <CategoryID>${categoryID}</CategoryID>
+    </PrimaryCategory>
+    <ConditionID>${conditionID}</ConditionID>
+    <StartPrice>${bookListing.price}</StartPrice>
+    <Currency>USD</Currency>
+    <Country>US</Country>
+    <Location>United States</Location>
+    <ListingType>FixedPriceItem</ListingType>
+    <ListingDuration>GTC</ListingDuration>
+    <Quantity>${bookListing.quantity || 1}</Quantity>
+    ${pictureDetailsXml}
+    ${itemSpecificsXml}
+    ${shippingXml}
+    <ReturnPolicy>
+      <ReturnsAcceptedOption>ReturnsAccepted</ReturnsAcceptedOption>
+      <RefundOption>MoneyBack</RefundOption>
+      <ReturnsWithinOption>Days_30</ReturnsWithinOption>
+      <ShippingCostPaidByOption>Buyer</ShippingCostPaidByOption>
+    </ReturnPolicy>
+  </Item>
+</AddItemRequest>`;
+
+  console.log('📖 Built book-specific eBay XML request:', {
+    categoryID,
+    conditionID,
+    title: bookListing.title,
+    price: bookListing.price,
+    photoCount: photoUrls.length,
+    hasItemSpecifics: !!itemSpecifics
+  });
+
+  return xmlRequest;
+}
+
 module.exports = {
   getEbayAccessToken,
   hostPhotoToServer,
@@ -528,6 +656,7 @@ module.exports = {
   getEbayConditionID,
   escapeXml,
   buildEbayXMLRequest,
+  buildEbayBookXMLRequest,
   callEbayTradingAPI,
   parseEbayResponse,
   createEbayListing

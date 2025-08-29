@@ -149,54 +149,69 @@ app.post("/api/analyze", upload.array('photos'), async (req, res) => {
 
     console.log(`🔍 Processing ${photos.length} photos for ${listingType} listing`);
 
-    // Process photos
+    // Process photos for OpenAI
     const imageContents = await processPhotos(photos);
 
     // Get appropriate prompt (using client-provided for now)
     const finalPrompt = prompt;
 
-    // Call OpenAI
-    const aiResponse = await callOpenAI(finalPrompt, imageContents);
-
-    // Upload photos to GameSighter in background after OpenAI analysis
-    console.log('📸 Starting background upload to GameSighter...');
-    const hostedPhotos = [];
+    // 🚀 Run OpenAI analysis and GameSighter uploads SIMULTANEOUSLY
+    console.log('🚀 Starting OpenAI analysis and GameSighter uploads simultaneously...');
     
-    try {
-      for (let i = 0; i < photos.length; i++) {
-        const photo = photos[i];
-        console.log(`📸 Uploading photo ${i + 1}/${photos.length} to GameSighter...`);
-        
-        const uploadResult = await hostPhotoToServer(
-          photo.buffer, 
-          photo.originalname || `photo_${i}.jpg`, 
-          photo.mimetype || 'image/jpeg'
-        );
-        
-        if (uploadResult.success) {
-          hostedPhotos.push({
-            url: uploadResult.hostedUrl,
-            originalFilename: uploadResult.originalFilename,
-            index: i
-          });
-          console.log(`✅ Photo ${i + 1} hosted: ${uploadResult.hostedUrl}`);
-        } else {
-          console.error(`❌ Photo ${i + 1} upload failed: ${uploadResult.error}`);
-          hostedPhotos.push({
-            url: null,
-            error: uploadResult.error,
-            originalFilename: photo.originalname || `photo_${i}.jpg`,
-            index: i
-          });
-        }
-      }
-    } catch (uploadError) {
-      console.error('❌ Error during photo upload:', uploadError);
-      // Don't fail the whole request if photo upload fails
-    }
+    const startTime = Date.now();
+    
+    // Create OpenAI promise
+    const openaiPromise = callOpenAI(finalPrompt, imageContents);
+    
+    // Create GameSighter upload promises for ALL photos at once
+    const uploadPromises = photos.map((photo, index) => {
+      console.log(`📸 Queuing upload ${index + 1}/${photos.length}: ${photo.originalname || `photo_${index}.jpg`}`);
+      return hostPhotoToServer(
+        photo.buffer, 
+        photo.originalname || `photo_${index}.jpg`, 
+        photo.mimetype || 'image/jpeg'
+      ).then(result => ({
+        ...result,
+        index,
+        originalFilename: photo.originalname || `photo_${index}.jpg`
+      })).catch(error => ({
+        success: false,
+        error: error.message,
+        index,
+        originalFilename: photo.originalname || `photo_${index}.jpg`
+      }));
+    });
 
-    // Return raw response with hosted photo URLs
-    console.log('🎉 Successfully got OpenAI response and uploaded photos');
+    // Wait for BOTH OpenAI and ALL GameSighter uploads to complete
+    const [aiResponse, uploadResults] = await Promise.all([
+      openaiPromise,
+      Promise.all(uploadPromises)
+    ]);
+
+    const totalTime = Date.now() - startTime;
+    console.log(`⚡ Completed OpenAI + ${photos.length} uploads simultaneously in ${totalTime}ms`);
+
+    // Process upload results
+    const hostedPhotos = uploadResults.map(result => {
+      if (result.success) {
+        console.log(`✅ Photo ${result.index + 1} hosted: ${result.hostedUrl}`);
+        return {
+          url: result.hostedUrl,
+          originalFilename: result.originalFilename,
+          index: result.index
+        };
+      } else {
+        console.error(`❌ Photo ${result.index + 1} upload failed: ${result.error}`);
+        return {
+          url: null,
+          error: result.error,
+          originalFilename: result.originalFilename,
+          index: result.index
+        };
+      }
+    });
+
+    console.log(`🎉 Successfully got OpenAI response and uploaded ${hostedPhotos.filter(p => p.url).length}/${photos.length} photos`);
     res.json({ 
       success: true, 
       rawResponse: aiResponse,
@@ -383,6 +398,114 @@ app.post('/api/list-to-ebay-with-urls', async (req, res) => {
   }
 });
 
+// Book-specific eBay listing endpoint
+app.post("/api/list-book-to-ebay", async (req, res) => {
+  try {
+    console.log('📖 Received book listing request');
+    console.log('📖 Request body keys:', Object.keys(req.body));
+    console.log('📖 Book data preview:', {
+      title: req.body.title,
+      author: req.body.author,
+      price: req.body.price,
+      condition: req.body.condition,
+      hasItemSpecifics: !!req.body.item_specifics,
+      hasPhotos: !!req.body.photos,
+      photoCount: req.body.photos?.length || 0
+    });
+
+    const bookData = req.body;
+
+    // Validate book-specific fields
+    if (!bookData.title) {
+      return res.status(400).json({
+        success: false,
+        error: 'Book title is required'
+      });
+    }
+
+    if (!bookData.author) {
+      return res.status(400).json({
+        success: false,
+        error: 'Book author is required'
+      });
+    }
+
+    if (!bookData.photos || bookData.photos.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Book photos are required'
+      });
+    }
+
+    // Format book data for eBay API
+    const formattedBookListing = {
+      title: bookData.title,
+      price: parseFloat(bookData.price),
+      condition: bookData.condition || 'Used',
+      category: bookData.category || 'Books & Magazines > Fiction & Literature',
+      description: bookData.description || `${bookData.title} by ${bookData.author}. From a smoke-free home. Fast shipping with tracking.`,
+      
+      // Book-specific item specifics
+      item_specifics: bookData.item_specifics || {
+        'Author': bookData.author,
+        'Format': bookData.format || 'Hardcover',
+        'Language': bookData.language || 'English',
+        'Topic': bookData.topic || 'General',
+        'Publisher': bookData.publisher || '',
+        'Publication Year': bookData.publicationYear || '',
+        'ISBN': bookData.isbn || ''
+      },
+      
+      shipping: bookData.shipping || 'USPS Media Mail',
+      quantity: parseInt(bookData.quantity) || 1,
+      listingType: 'BOOK_ITEM'
+    };
+
+    console.log('📖 Formatted book listing for eBay:', {
+      title: formattedBookListing.title,
+      price: formattedBookListing.price,
+      condition: formattedBookListing.condition,
+      category: formattedBookListing.category,
+      itemSpecificsCount: Object.keys(formattedBookListing.item_specifics).length,
+      photoUrls: bookData.photos
+    });
+
+    // Create eBay listing using book-specific data
+    const ebayResult = await createEbayBookListing(formattedBookListing, bookData.photos);
+
+    if (ebayResult.success) {
+      console.log('✅ Book listed successfully on eBay:', ebayResult);
+      res.json({
+        success: true,
+        listingId: ebayResult.listingId,
+        itemId: ebayResult.itemId,
+        fees: ebayResult.fees,
+        message: 'Book listed successfully on eBay',
+        bookData: {
+          title: formattedBookListing.title,
+          author: formattedBookListing.item_specifics.Author,
+          price: formattedBookListing.price
+        }
+      });
+    } else {
+      console.error('❌ Failed to list book on eBay:', ebayResult);
+      res.status(500).json({
+        success: false,
+        error: ebayResult.error,
+        message: ebayResult.message || 'Failed to list book on eBay'
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Error in book listing endpoint:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Internal server error while listing book'
+    });
+  }
+});
+
 // Helper function to create eBay listing with pre-hosted URLs
 async function createEbayListingWithUrls(listing, hostedPhotoUrls) {
   try {
@@ -409,6 +532,42 @@ async function createEbayListingWithUrls(listing, hostedPhotoUrls) {
       success: false,
       error: error.message,
       message: `Failed to create eBay listing: ${error.message}`
+    };
+  }
+}
+
+// Helper function to create book listing on eBay
+async function createEbayBookListing(bookListing, hostedPhotoUrls) {
+  try {
+    const { buildEbayBookXMLRequest, callEbayTradingAPI, parseEbayResponse } = require('./src/services/ebayApi');
+    
+    console.log(`📖 Creating eBay book listing with ${hostedPhotoUrls.length} photos`);
+    
+    // Build book-specific eBay XML request
+    const xmlRequest = buildEbayBookXMLRequest(bookListing, hostedPhotoUrls);
+    
+    // Call eBay Trading API
+    const ebayResponse = await callEbayTradingAPI(xmlRequest);
+    
+    // Parse response and return result
+    const parsedResponse = parseEbayResponse(ebayResponse);
+    
+    // Add book-specific metadata to response
+    parsedResponse.hostedPhotoUrls = hostedPhotoUrls;
+    parsedResponse.bookData = {
+      title: bookListing.title,
+      author: bookListing.item_specifics.Author,
+      price: bookListing.price,
+      isbn: bookListing.item_specifics.ISBN
+    };
+    
+    return parsedResponse;
+  } catch (error) {
+    console.error('❌ Error creating eBay book listing:', error);
+    return {
+      success: false,
+      error: error.message,
+      message: `Failed to create book listing: ${error.message}`
     };
   }
 }

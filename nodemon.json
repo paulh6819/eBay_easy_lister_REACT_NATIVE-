@@ -1,0 +1,17 @@
+{
+  "watch": [
+    "new-server.js",
+    "src/services/",
+    ".env"
+  ],
+  "ext": "js,json,env",
+  "ignore": [
+    "node_modules/",
+    "*.test.js"
+  ],
+  "exec": "node new-server.js",
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "delay": 1000
+}

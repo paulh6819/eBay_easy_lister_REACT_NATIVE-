@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { colors, spacing, borderRadius, shadows } from '../constants/colors';
 import EditableListingCard from './EditableListingCard';
+import BookListingCard from './BookListingCard';
 import { postAllListings, postSingleListing } from '../services/ebayPostingService';
+import { postBookToEbay } from '../services/bookListingService';
 
 /**
  * Results component for displaying OpenAI generated listings
@@ -67,7 +69,16 @@ export default function Results({ listings = [], onClearAll, loading = false, er
   const handlePostListing = async (listingData) => {
     try {
       console.log('📤 Posting single listing to eBay:', listingData);
-      const result = await postSingleListing(listingData);
+      
+      // Route to appropriate posting service based on listing type
+      let result;
+      if (isBookListing(listingData)) {
+        console.log('📖 Routing to book posting service');
+        result = await postBookToEbay(listingData);
+      } else {
+        console.log('📦 Routing to general posting service');
+        result = await postSingleListing(listingData);
+      }
       
       if (result.success) {
         Alert.alert(
@@ -89,6 +100,13 @@ export default function Results({ listings = [], onClearAll, loading = false, er
         [{ text: 'OK' }]
       );
     }
+  };
+
+  // Helper function to determine if a listing is a book
+  const isBookListing = (listing) => {
+    return listing.listingType === 'BOOK_ITEM' || 
+           listing.listingType?.type === 'BOOK_ITEM' ||
+           listing.listingType?.title?.includes('Book');
   };
 
   const handlePostAllListings = async () => {
@@ -182,21 +200,44 @@ export default function Results({ listings = [], onClearAll, loading = false, er
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled={true}
       >
-        {listings.map((listing) => (
-          <EditableListingCard 
-            key={listing.id} 
-            listing={{
-              ...listing.parsedListing,
-              photos: listing.photos,
-              hostedPhotos: listing.hostedPhotos,
-              id: listing.id,
-              status: listing.status,
-              listingType: listing.listingType.title
-            }}
-            onDataChange={(newData) => handleDataChange(listing.id, newData)}
-            onPost={(listingData) => handlePostListing(listingData)}
-          />
-        ))}
+        {listings.map((listing) => {
+          // Determine if this is a book listing
+          const isBook = listing.listingType?.type === 'BOOK_ITEM' || 
+                        listing.listingType?.title?.includes('Book');
+
+          const listingData = {
+            ...listing.parsedListing,
+            photos: listing.photos,
+            hostedPhotos: listing.hostedPhotos,
+            id: listing.id,
+            status: listing.status,
+            listingType: listing.listingType?.type || listing.listingType
+          };
+
+          // Render appropriate card component
+          if (isBook) {
+            return (
+              <BookListingCard 
+                key={listing.id} 
+                listing={listingData}
+                onDataChange={(newData) => handleDataChange(listing.id, newData)}
+                onPost={(listingData) => handlePostListing(listingData)}
+              />
+            );
+          } else {
+            return (
+              <EditableListingCard 
+                key={listing.id} 
+                listing={{
+                  ...listingData,
+                  listingType: listing.listingType.title
+                }}
+                onDataChange={(newData) => handleDataChange(listing.id, newData)}
+                onPost={(listingData) => handlePostListing(listingData)}
+              />
+            );
+          }
+        })}
       </ScrollView>
     </View>
   );
