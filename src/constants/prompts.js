@@ -52,6 +52,7 @@ export const AI_PROMPTS = {
     "category": "[Best eBay category based on the 
   book topic]",
     "item_specifics": {
+      "Book Title": "[Exact book title from cover, without author or subtitle]",
       "Author": "[Author name from cover or 
   spine]",
       "Format": "[Hardcover | Paperback]",

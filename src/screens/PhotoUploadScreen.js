@@ -42,11 +42,12 @@ export default function PhotoUploadScreen({ navigation }) {
   const handleCreateListing = (listingData) => {
     console.log('✅ Listing created successfully:', listingData);
     
-    // Create a new listing object with unique ID
+    // Create a new listing object with unique ID and hosted photo URLs
     const newListing = {
       id: Date.now() + Math.random(), // Unique ID
       timestamp: new Date().toISOString(),
       photos: listingData.photos,
+      hostedPhotos: listingData.hostedPhotos || [], // GameSighter URLs ready for eBay
       listingType: listingData.listingType,
       parsedListing: listingData.parsedListing,
       rawResponse: listingData.rawResponse,

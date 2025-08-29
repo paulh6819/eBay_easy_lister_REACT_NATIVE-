@@ -14,6 +14,20 @@ import { postAllListings, postSingleListing } from '../services/ebayPostingServi
  */
 export default function Results({ listings = [], onClearAll, loading = false, error = null }) {
   const [postingAll, setPostingAll] = useState(false);
+  
+  // Debug logging to understand listing structure
+  console.log('📋 Results component received listings:', {
+    count: listings.length,
+    listings: listings.map(l => ({
+      id: l.id,
+      hasPhotos: !!l.photos,
+      photoCount: l.photos?.length || 0,
+      hasHostedPhotos: !!l.hostedPhotos,
+      hostedPhotoCount: l.hostedPhotos?.length || 0,
+      hasParsedListing: !!l.parsedListing,
+      title: l.parsedListing?.title || l.title || 'No title'
+    }))
+  });
   if (loading) {
     return (
       <View style={styles.container}>
@@ -101,8 +115,9 @@ export default function Results({ listings = [], onClearAll, loading = false, er
                 category: listing.parsedListing.category || 'Uncategorized',
                 description: listing.parsedListing.description || '',
                 photos: listing.photos,
+                hostedPhotos: listing.hostedPhotos || [], // Include hosted photos
                 itemSpecifics: listing.parsedListing.item_specifics || {},
-                listingType: listing.listingType
+                listingType: listing.listingType?.type || listing.listingType || 'GENERAL_LISTING'
               }));
               
               const result = await postAllListings(listingsToPost);
@@ -173,6 +188,7 @@ export default function Results({ listings = [], onClearAll, loading = false, er
             listing={{
               ...listing.parsedListing,
               photos: listing.photos,
+              hostedPhotos: listing.hostedPhotos,
               id: listing.id,
               status: listing.status,
               listingType: listing.listingType.title

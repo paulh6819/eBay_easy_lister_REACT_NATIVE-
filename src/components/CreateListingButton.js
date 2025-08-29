@@ -78,10 +78,11 @@ export default function CreateListingButton({
       const parsedListing = parseListingResponse(result.rawResponse, selectedListingType.type);
       console.log('✅ Parsed Listing:', JSON.stringify(parsedListing, null, 2));
 
-      // Pass results to parent component
+      // Pass results to parent component with hosted photo URLs
       if (onPress) {
         onPress({
           photos,
+          hostedPhotos: result.hostedPhotos || [], // GameSighter URLs from analyze endpoint
           listingType: selectedListingType,
           prompt,
           photoCount,

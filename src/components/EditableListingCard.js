@@ -11,6 +11,17 @@ import { colors, spacing, borderRadius, shadows } from '../constants/colors';
  */
 export default function EditableListingCard({ listing, onPost, onDataChange }) {
   const [isPosting, setIsPosting] = useState(false);
+  
+  // Debug logging
+  console.log('🔍 EditableListingCard received listing:', {
+    id: listing?.id,
+    hasPhotos: !!listing?.photos,
+    photoCount: listing?.photos?.length || 0,
+    hasHostedPhotos: !!listing?.hostedPhotos,
+    hostedPhotoCount: listing?.hostedPhotos?.length || 0,
+    photos: listing?.photos?.map((p, i) => ({ index: i, uri: p?.uri?.substring(0, 30) + '...' })) || [],
+    hostedPhotos: listing?.hostedPhotos?.map((p, i) => ({ index: i, url: p?.url?.substring(0, 50) + '...' })) || []
+  });
   const [listingData, setListingData] = useState({
     title: listing?.title || 'Untitled Listing',
     price: listing?.price || '0.00',
@@ -34,6 +45,11 @@ export default function EditableListingCard({ listing, onPost, onDataChange }) {
     shipping: listing?.shipping || 'USPS Media Mail',
     quantity: listing?.quantity || 1,
     photos: listing?.photos || [],
+    // Preserve the original listing data for posting
+    id: listing?.id,
+    hostedPhotos: listing?.hostedPhotos || [],
+    listingType: listing?.listingType,
+    parsedListing: listing?.parsedListing,
   });
 
   const handleFieldChange = (field, value) => {
@@ -49,7 +65,23 @@ export default function EditableListingCard({ listing, onPost, onDataChange }) {
     
     setIsPosting(true);
     try {
-      await onPost(listingData);
+      // Include all necessary data for posting, preserving hostedPhotos from original listing
+      const postData = {
+        ...listingData,
+        // Ensure we have the critical fields for posting
+        id: listing?.id || listingData.id,
+        hostedPhotos: listing?.hostedPhotos || listingData.hostedPhotos || [],
+        listingType: listing?.listingType || listingData.listingType
+      };
+      
+      console.log('📤 EditableListingCard posting data:', {
+        id: postData.id,
+        title: postData.title,
+        hasHostedPhotos: !!postData.hostedPhotos,
+        hostedPhotoCount: postData.hostedPhotos?.length || 0
+      });
+      
+      await onPost(postData);
     } finally {
       setIsPosting(false);
     }

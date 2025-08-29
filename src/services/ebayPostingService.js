@@ -2,6 +2,7 @@
  * eBay Posting Service
  * Handles posting individual listings and batch posting to eBay
  */
+import * as FileSystem from 'expo-file-system';
 
 // For React Native iOS Simulator, use your local IP address
 const API_BASE_URL = 'http://192.168.1.207:3000';
@@ -22,19 +23,89 @@ const API_BASE_URL = 'http://192.168.1.207:3000';
 export const postSingleListing = async (listingData) => {
   try {
     console.log('📤 Posting single listing to eBay:', listingData.id);
+    console.log('📤 Full listing data:', JSON.stringify(listingData, null, 2));
     
-    // TODO: Replace with actual eBay API call
-    // For now, simulate the posting process
-    const postingResult = await simulateEbayPosting(listingData);
+    console.log('📤 Listing data structure:', JSON.stringify({
+      id: listingData.id,
+      title: listingData.title || listingData.parsedListing?.title,
+      hasHostedPhotos: !!listingData.hostedPhotos,
+      hostedPhotoCount: listingData.hostedPhotos?.length || 0,
+      hostedPhotos: listingData.hostedPhotos?.map((p, i) => ({ index: i, url: p.url }))
+    }, null, 2));
     
-    console.log('✅ Single listing posted successfully:', postingResult);
-    return {
-      success: true,
-      listingId: listingData.id,
-      ebayListingId: postingResult.ebayListingId,
-      message: 'Listing posted successfully to eBay',
-      data: postingResult
+    // Use hosted photo URLs instead of uploading photos
+    if (!listingData.hostedPhotos || listingData.hostedPhotos.length === 0) {
+      console.log('⚠️ No hosted photos found, checking for regular photos as fallback...');
+      
+      // Fallback: if no hosted photos but we have regular photos, show helpful error
+      if (listingData.photos && listingData.photos.length > 0) {
+        throw new Error('Photos are not hosted yet. Please try regenerating the listing or wait for photos to upload to GameSighter.');
+      } else {
+        throw new Error('No photos available - listing requires photos for eBay posting');
+      }
+    }
+    
+    // Extract only successful photo URLs
+    const photoUrls = listingData.hostedPhotos
+      .filter(photo => photo.url && !photo.error)
+      .map(photo => photo.url);
+    
+    if (photoUrls.length === 0) {
+      throw new Error('No valid hosted photo URLs found - all photos failed to upload');
+    }
+    
+    console.log(`📸 Using ${photoUrls.length} pre-hosted photo URLs:`, photoUrls);
+    
+    // Prepare listing data with hosted photo URLs
+    // Handle both flat structure and parsedListing structure for backward compatibility
+    const listing = listingData.parsedListing || listingData;
+    
+    const ebayListingData = {
+      title: listing.title,
+      price: listing.price,
+      condition: listing.condition,
+      category: listing.category,
+      description: listing.description,
+      itemSpecifics: listing.itemSpecifics || listing.item_specifics || {},
+      listingType: listingData.listingType?.type || listing.listingType || 'GENERAL_LISTING',
+      hostedPhotoUrls: photoUrls // Pass pre-hosted URLs directly
     };
+    
+    // Call eBay listing endpoint with hosted URLs
+    console.log(`📤 Calling ${API_BASE_URL}/api/list-to-ebay-with-urls`);
+    const response = await fetch(`${API_BASE_URL}/api/list-to-ebay-with-urls`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(ebayListingData)
+    });
+    
+    console.log('📤 Response status:', response.status);
+    console.log('📤 Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log('📤 Error response:', errorText);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log('📤 Server response:', result);
+    
+    if (result.success) {
+      console.log('✅ Single listing posted successfully:', result.data?.itemId);
+      return {
+        success: true,
+        listingId: listingData.id,
+        ebayListingId: result.data?.itemId || result.data?.ebayListingId,
+        message: result.message || 'Listing posted successfully to eBay',
+        data: result.data,
+        url: result.data?.url
+      };
+    } else {
+      throw new Error(result.error || result.message || 'Unknown eBay error');
+    }
     
   } catch (error) {
     console.error('❌ Error posting single listing:', error);
@@ -172,32 +243,6 @@ export const postListingsBatch = async (listingsArray, batchSize = 5) => {
   }
 };
 
-/**
- * Simulate eBay posting for development/testing
- * @param {Object} listingData - The listing data
- * @returns {Promise<Object>} Simulated eBay response
- */
-const simulateEbayPosting = async (listingData) => {
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-  
-  // Simulate random success/failure for testing
-  if (Math.random() > 0.1) { // 90% success rate
-    return {
-      ebayListingId: `EBAY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      status: 'Active',
-      url: `https://www.ebay.com/itm/simulated-listing-${Date.now()}`,
-      fees: {
-        insertionFee: 0.35,
-        finalValueFee: parseFloat(listingData.price) * 0.1
-      },
-      duration: '7 days',
-      postedAt: new Date().toISOString()
-    };
-  } else {
-    throw new Error('eBay API returned an error: Listing validation failed');
-  }
-};
 
 /**
  * Check if the eBay posting service is available
@@ -205,11 +250,19 @@ const simulateEbayPosting = async (listingData) => {
  */
 export const checkEbayServiceStatus = async () => {
   try {
-    // TODO: Replace with actual eBay API health check
     console.log('🔍 Checking eBay service status...');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    console.log('✅ eBay service is available');
-    return true;
+    
+    // Check server health
+    const response = await fetch(`${API_BASE_URL}/api/health`);
+    const health = await response.json();
+    
+    if (health.status === 'ok') {
+      console.log('✅ eBay service is available');
+      return true;
+    } else {
+      console.log('❌ eBay service health check failed');
+      return false;
+    }
   } catch (error) {
     console.error('❌ eBay service unavailable:', error);
     return false;
