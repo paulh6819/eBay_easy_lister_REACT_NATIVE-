@@ -12,14 +12,24 @@ import { colors, spacing, borderRadius, shadows } from '../constants/colors';
 export default function BookListingCard({ listing, onPost, onDataChange }) {
   const [isPosting, setIsPosting] = useState(false);
   
-  // Debug logging
+  // Debug logging - detailed book data inspection
   console.log('📖 BookListingCard received listing:', {
     id: listing?.id,
     title: listing?.title,
     hasPhotos: !!listing?.photos,
     photoCount: listing?.photos?.length || 0,
     hasHostedPhotos: !!listing?.hostedPhotos,
-    hostedPhotoCount: listing?.hostedPhotos?.length || 0
+    hostedPhotoCount: listing?.hostedPhotos?.length || 0,
+    rawListing: listing // Log the full listing object
+  });
+
+  console.log('📖 Book-specific fields inspection:', {
+    'listing?.item_specifics': listing?.item_specifics,
+    'listing?.Author': listing?.Author,
+    'listing?.ISBN': listing?.ISBN,
+    'listing?.item_specifics?.Author': listing?.item_specifics?.Author,
+    'listing?.item_specifics?.ISBN': listing?.item_specifics?.ISBN,
+    'all listing keys': Object.keys(listing || {})
   });
 
   const [bookData, setBookData] = useState({
@@ -144,14 +154,31 @@ export default function BookListingCard({ listing, onPost, onDataChange }) {
         <Text style={styles.sectionTitle}>📖 Book Information</Text>
         
         <View style={styles.field}>
-          <Text style={styles.label}>Title</Text>
+          <View style={styles.titleLabelRow}>
+            <Text style={styles.label}>Title</Text>
+            <Text style={[
+              styles.characterCount,
+              bookData.title.length > 80 ? styles.characterCountOver : styles.characterCountNormal
+            ]}>
+              {bookData.title.length}/80
+            </Text>
+          </View>
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              bookData.title.length > 80 ? styles.inputError : null
+            ]}
             value={bookData.title}
             onChangeText={(text) => handleFieldChange('title', text)}
             placeholder="Enter book title with author"
             multiline
+            maxLength={80}
           />
+          {bookData.title.length > 80 && (
+            <Text style={styles.errorText}>
+              Title must be 80 characters or less for eBay
+            </Text>
+          )}
         </View>
 
         <View style={styles.field}>
@@ -418,5 +445,31 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 16,
     fontWeight: '600',
+  },
+  titleLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  characterCount: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  characterCountNormal: {
+    color: colors.textMuted,
+  },
+  characterCountOver: {
+    color: colors.error || '#e74c3c',
+  },
+  inputError: {
+    borderColor: colors.error || '#e74c3c',
+    borderWidth: 2,
+  },
+  errorText: {
+    fontSize: 12,
+    color: colors.error || '#e74c3c',
+    marginTop: spacing.xs,
+    fontWeight: '500',
   },
 });

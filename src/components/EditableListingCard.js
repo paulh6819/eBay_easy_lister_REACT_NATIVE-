@@ -101,17 +101,34 @@ export default function EditableListingCard({ listing, onPost, onDataChange }) {
       </ScrollView>
 
       <View style={styles.contentContainer}>
-        {/* Title - Editable */}
+        {/* Title - Editable with character counter */}
         <TouchableOpacity style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>Title:</Text>
+          <View style={styles.titleLabelRow}>
+            <Text style={styles.fieldLabel}>Title:</Text>
+            <Text style={[
+              styles.characterCount,
+              listingData.title.length > 80 ? styles.characterCountOver : styles.characterCountNormal
+            ]}>
+              {listingData.title.length}/80
+            </Text>
+          </View>
           <TextInput
-            style={styles.titleInput}
+            style={[
+              styles.titleInput,
+              listingData.title.length > 80 ? styles.inputError : null
+            ]}
             value={listingData.title}
             onChangeText={(value) => handleFieldChange('title', value)}
             multiline
             numberOfLines={2}
             placeholder="Enter listing title"
+            maxLength={80}
           />
+          {listingData.title.length > 80 && (
+            <Text style={styles.errorText}>
+              Title must be 80 characters or less for eBay
+            </Text>
+          )}
         </TouchableOpacity>
         
         {/* Price and Condition Row */}
@@ -398,5 +415,31 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontWeight: '600',
     fontSize: 16,
+  },
+  titleLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  characterCount: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  characterCountNormal: {
+    color: colors.textMuted,
+  },
+  characterCountOver: {
+    color: colors.error || '#e74c3c',
+  },
+  inputError: {
+    borderColor: colors.error || '#e74c3c',
+    borderWidth: 2,
+  },
+  errorText: {
+    fontSize: 12,
+    color: colors.error || '#e74c3c',
+    marginTop: spacing.xs,
+    fontWeight: '500',
   },
 });

@@ -8,18 +8,25 @@
 export const parseBookResponse = (rawResponse) => {
   try {
     console.log('📖 Parsing Book response...');
+    console.log('📖 Raw OpenAI response:', rawResponse);
     
     // Try to extract JSON from the response
     let jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       // Sometimes OpenAI returns just JSON without extra text
       const listing = JSON.parse(rawResponse.trim());
-      console.log('✅ Parsed book listing:', listing);
+      console.log('✅ Parsed book listing (no match):', listing);
+      console.log('📖 Book item_specifics:', listing.item_specifics);
+      console.log('📖 Author found:', listing.item_specifics?.Author);
+      console.log('📖 ISBN found:', listing.item_specifics?.ISBN);
       return listing;
     }
 
     const listing = JSON.parse(jsonMatch[0]);
-    console.log('✅ Parsed book listing:', listing);
+    console.log('✅ Parsed book listing (with match):', listing);
+    console.log('📖 Book item_specifics:', listing.item_specifics);
+    console.log('📖 Author found:', listing.item_specifics?.Author);
+    console.log('📖 ISBN found:', listing.item_specifics?.ISBN);
     
     // Validate required book fields
     if (!listing.title) {
@@ -29,6 +36,7 @@ export const parseBookResponse = (rawResponse) => {
     return listing;
   } catch (error) {
     console.error('❌ Error parsing book response:', error);
+    console.error('❌ Failed response text:', rawResponse);
     throw new Error(`Failed to parse book listing: ${error.message}`);
   }
 };
