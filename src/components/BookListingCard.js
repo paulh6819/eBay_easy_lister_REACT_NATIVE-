@@ -29,7 +29,8 @@ export default function BookListingCard({ listing, onPost, onDataChange }) {
     'listing?.ISBN': listing?.ISBN,
     'listing?.item_specifics?.Author': listing?.item_specifics?.Author,
     'listing?.item_specifics?.ISBN': listing?.item_specifics?.ISBN,
-    'all listing keys': Object.keys(listing || {})
+    'all listing keys': Object.keys(listing || {}),
+    'full listing object': listing
   });
 
   const [bookData, setBookData] = useState({

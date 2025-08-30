@@ -41,40 +41,32 @@ export const AI_PROMPTS = {
   "Very Good" instead. The condition hierarchy is: 
   Very Good > Good > Acceptable.
 
-  Return your answer in the following JSON format:
+  CRITICAL: You MUST return the exact JSON format below. Do NOT omit the item_specifics object. This is required for proper data parsing.
+
+  Return your answer in this EXACT JSON format:
 
   {
-    "title": "[Full eBay title with author and 
-  subtitle if visible]",
-    "price": [Number like 12.99, based on condition
-   and book type],
+    "title": "[Full eBay title with author and subtitle if visible]",
+    "price": 12.99,
     "condition": "[Very Good | Good | Acceptable]",
-    "category": "[Best eBay category based on the 
-  book topic]",
+    "category": "Books & Magazines > Books",
     "item_specifics": {
-      "Book Title": "[Exact book title from cover, without author or subtitle]",
-      "Author": "[Author name from cover or 
-  spine]",
-      "Format": "[Hardcover | Paperback]",
-      "Language": "[English, etc.]",
-      "Topic": "[Art, History, Sci-Fi, etc. based 
-  on content]",
-      "Publisher": "[Publisher if visible on spine 
-  or copyright]",
+      "Book Title": "[Exact book title from cover, without author]",
+      "Author": "[Author name from cover or spine - REQUIRED]",
+      "Format": "Hardcover",
+      "Language": "English", 
+      "Topic": "[Art, History, Fiction, etc. based on content]",
+      "Publisher": "[Publisher if visible on spine or copyright]",
       "Publication Year": "[Year if visible]",
-      "ISBN": "[If visible on back cover or 
-  copyright page]"
+      "ISBN": "[ISBN if visible on back cover or copyright page]"
     },
-    "description": "[4-6 sentence HTML-safe 
-  description. Include book summary if visible, 
-  condition assessment from photos, and marketing 
-  phrases like 'Money-back guaranteed', 'From a 
-  smoke-free home', 'Fast shipping']",
+    "description": "[4-6 sentence description with condition details]",
     "shipping": "USPS Media Mail",
-    "return_policy": "30-day returns accepted, 
-  buyer pays return shipping",
+    "return_policy": "30-day returns accepted",
     "listing_duration": "GTC"
   }
+
+  IMPORTANT: The item_specifics object with Author, ISBN, etc. is MANDATORY. Do not skip this section.
 
   Only return the JSON. No preamble or follow-up 
   message.`,

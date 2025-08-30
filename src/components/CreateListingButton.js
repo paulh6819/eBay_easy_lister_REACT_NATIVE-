@@ -40,7 +40,7 @@ export default function CreateListingButton({
 
       // Get the appropriate prompt based on listing type
       let prompt;
-      switch (selectedListingType.type) {
+      switch (selectedListingType) {
         case 'BOOK_ITEM':
           prompt = AI_PROMPTS.BOOK_ITEM(photoCount);
           break;
@@ -63,19 +63,19 @@ export default function CreateListingButton({
           prompt = AI_PROMPTS.GENERAL_ITEM;
       }
 
-      console.log('Creating listing with type:', selectedListingType.type);
+      console.log('Creating listing with type:', selectedListingType);
       
       // Call the new /api/analyze endpoint
       const result = await analyzePhotos({
         photos,
-        listingType: selectedListingType.type,
+        listingType: selectedListingType,
         prompt
       });
 
       console.log('✅ Raw OpenAI Response:', result);
 
       // Parse the response based on listing type
-      const parsedListing = parseListingResponse(result.rawResponse, selectedListingType.type);
+      const parsedListing = parseListingResponse(result.rawResponse, selectedListingType);
       console.log('✅ Parsed Listing:', JSON.stringify(parsedListing, null, 2));
 
       // Pass results to parent component with hosted photo URLs

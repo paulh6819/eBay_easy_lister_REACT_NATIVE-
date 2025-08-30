@@ -27,6 +27,7 @@ export const parseBookResponse = (rawResponse) => {
     console.log('📖 Book item_specifics:', listing.item_specifics);
     console.log('📖 Author found:', listing.item_specifics?.Author);
     console.log('📖 ISBN found:', listing.item_specifics?.ISBN);
+    console.log('📖 Full listing structure:', JSON.stringify(listing, null, 2));
     
     // Validate required book fields
     if (!listing.title) {

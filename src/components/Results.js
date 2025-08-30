@@ -205,6 +205,15 @@ export default function Results({ listings = [], onClearAll, loading = false, er
           const isBook = listing.listingType?.type === 'BOOK_ITEM' || 
                         listing.listingType?.title?.includes('Book');
 
+          // Debug log the original listing data structure
+          console.log('🔍 Results.js - Original listing structure:', {
+            id: listing.id,
+            hasParseList: !!listing.parsedListing,
+            parsedListingKeys: Object.keys(listing.parsedListing || {}),
+            parsedListingContent: listing.parsedListing,
+            listingType: listing.listingType
+          });
+
           const listingData = {
             ...listing.parsedListing,
             photos: listing.photos,
@@ -213,6 +222,15 @@ export default function Results({ listings = [], onClearAll, loading = false, er
             status: listing.status,
             listingType: listing.listingType?.type || listing.listingType
           };
+
+          console.log('📋 Results.js - Data passed to BookListingCard:', {
+            id: listingData.id,
+            title: listingData.title,
+            author: listingData.author,
+            isbn: listingData.isbn,
+            item_specifics: listingData.item_specifics,
+            allKeys: Object.keys(listingData)
+          });
 
           // Render appropriate card component
           if (isBook) {
