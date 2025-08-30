@@ -14,6 +14,7 @@ export default function PhotoUploadScreen({ navigation }) {
   const { uploadedPhotos, photosPerListing, clearPhotos } = usePhotos();
   const [selectedListingType, setSelectedListingType] = useState(null);
   const [generatedListings, setGeneratedListings] = useState([]);
+  const [processingListings, setProcessingListings] = useState([]);
 
   // Load saved listing type from AsyncStorage on component mount
   useEffect(() => {
@@ -39,7 +40,34 @@ export default function PhotoUploadScreen({ navigation }) {
     }
   };
 
-  const handleCreateListing = (listingData) => {
+  const handleStartProcessing = () => {
+    // Create a processing placeholder when user clicks Generate
+    const processingId = Date.now() + Math.random();
+    const processingItem = {
+      id: processingId,
+      timestamp: new Date().toISOString(),
+      status: 'processing',
+      listingType: selectedListingType
+    };
+    
+    setProcessingListings(prev => [...prev, processingItem]);
+    console.log('🔄 Started processing listing with ID:', processingId);
+    return processingId;
+  };
+
+  const handleCreateListing = (listingData, processingId) => {
+    // Remove the processing placeholder
+    if (processingId) {
+      setProcessingListings(prev => prev.filter(item => item.id !== processingId));
+    }
+
+    // Handle errors
+    if (listingData.error) {
+      console.error('❌ Error creating listing:', listingData.error);
+      // Could show error toast here
+      return;
+    }
+
     console.log('✅ Listing created successfully:', listingData);
     
     // Create a new listing object with unique ID and hosted photo URLs
@@ -54,14 +82,12 @@ export default function PhotoUploadScreen({ navigation }) {
       status: 'ready' // ready, editing, posted
     };
     
-    // Add to the array - each listing is completely isolated
     setGeneratedListings(prevListings => [...prevListings, newListing]);
     
-    // Clear the photos after successful listing creation
+    // Photos are already cleared when user clicked Generate button
     // Keep the listing type selected so user can easily create more of the same type
-    clearPhotos();
     
-    console.log('📋 Added new listing to results. Cleared form for next listing.');
+    console.log('📋 Added new listing to results. Form was already cleared for next listing.');
   };
 
   const handleListingTypeChange = (listingType) => {
@@ -98,10 +124,11 @@ export default function PhotoUploadScreen({ navigation }) {
           </>
         )}
 
-        {/* Results Section - Always visible once listings are generated */}
-        {generatedListings.length > 0 && (
+        {/* Results Section - Visible when there are listings or processing items */}
+        {(generatedListings.length > 0 || processingListings.length > 0) && (
           <Results 
             listings={generatedListings}
+            processingListings={processingListings}
             onClearAll={handleClearAllListings}
           />
         )}
@@ -120,6 +147,8 @@ export default function PhotoUploadScreen({ navigation }) {
             photos={uploadedPhotos}
             selectedListingType={selectedListingType}
             onPress={handleCreateListing}
+            onPhotoClear={clearPhotos}
+            onStartProcessing={handleStartProcessing}
           />
         </View>
       )}

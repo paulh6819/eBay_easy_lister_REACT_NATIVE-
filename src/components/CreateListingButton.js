@@ -18,6 +18,8 @@ export default function CreateListingButton({
   photos = [], 
   selectedListingType = null, 
   onPress, 
+  onPhotoClear,
+  onStartProcessing,
   disabled = false 
 }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -28,6 +30,16 @@ export default function CreateListingButton({
     if (!canCreateListing || disabled || isLoading) return;
 
     setIsLoading(true);
+
+    // Start processing indicator and clear photos immediately
+    // This allows user to start next listing right away
+    let processingId = null;
+    if (onStartProcessing) {
+      processingId = onStartProcessing();
+    }
+    if (onPhotoClear) {
+      onPhotoClear();
+    }
 
     try {
       // First test server connection
@@ -88,12 +100,16 @@ export default function CreateListingButton({
           photoCount,
           rawResponse: result,
           parsedListing
-        });
+        }, processingId);
       }
 
     } catch (error) {
       console.error('❌ Error creating listing:', error);
-      // You can add error handling here (toast, alert, etc.)
+      
+      // Remove processing indicator on error
+      if (onPress) {
+        onPress({ error: error.message }, processingId);
+      }
     } finally {
       setIsLoading(false);
     }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { colors, spacing, borderRadius, shadows } from '../constants/colors';
 import EditableListingCard from './EditableListingCard';
 import BookListingCard from './BookListingCard';
@@ -10,11 +10,12 @@ import { postBookToEbay } from '../services/bookListingService';
  * Results component for displaying OpenAI generated listings
  * @param {Object} props - Component props
  * @param {Array} props.listings - Array of generated listings
+ * @param {Array} props.processingListings - Array of listings being processed
  * @param {Function} props.onClearAll - Callback to clear all listings
  * @param {boolean} props.loading - Loading state
  * @param {string} props.error - Error message if any
  */
-export default function Results({ listings = [], onClearAll, loading = false, error = null }) {
+export default function Results({ listings = [], processingListings = [], onClearAll, loading = false, error = null }) {
   const [postingAll, setPostingAll] = useState(false);
   
   // Debug logging to understand listing structure
@@ -63,7 +64,21 @@ export default function Results({ listings = [], onClearAll, loading = false, er
 
   const handleDataChange = (listingId, newData) => {
     console.log('📝 Listing data changed:', listingId, newData);
-    // TODO: Update the listing data in parent state
+    // Update the listing data in parent state with edited form data
+    const updatedListings = listings.map(listing => {
+      if (listing.id === listingId) {
+        return {
+          ...listing,
+          editedData: newData // Store edited data separately from original parsedListing
+        };
+      }
+      return listing;
+    });
+    
+    // We need to call a parent function to update the state
+    // For now, we'll store it locally and use it in Post All
+    window.listingEdits = window.listingEdits || {};
+    window.listingEdits[listingId] = newData;
   };
 
   const handlePostListing = async (listingData) => {
@@ -125,18 +140,35 @@ export default function Results({ listings = [], onClearAll, loading = false, er
               console.log('📤 Starting batch posting of all listings');
               
               // Convert listings to the format expected by posting service
-              const listingsToPost = listings.map(listing => ({
-                id: listing.id,
-                title: listing.parsedListing.title || 'Untitled Listing',
-                price: listing.parsedListing.price || '0.00',
-                condition: listing.parsedListing.condition || 'Used',
-                category: listing.parsedListing.category || 'Uncategorized',
-                description: listing.parsedListing.description || '',
-                photos: listing.photos,
-                hostedPhotos: listing.hostedPhotos || [], // Include hosted photos
-                itemSpecifics: listing.parsedListing.item_specifics || {},
-                listingType: listing.listingType?.type || listing.listingType || 'GENERAL_LISTING'
-              }));
+              // Use edited form data if available, otherwise fall back to original OpenAI data
+              const listingsToPost = listings.map(listing => {
+                const editedData = window.listingEdits?.[listing.id];
+                const sourceData = editedData || listing.parsedListing;
+                
+                return {
+                  id: listing.id,
+                  title: sourceData.title || 'Untitled Listing',
+                  price: sourceData.price || '0.00',
+                  condition: sourceData.condition || 'Used',
+                  category: sourceData.category || 'Uncategorized',
+                  description: sourceData.description || '',
+                  photos: listing.photos,
+                  hostedPhotos: listing.hostedPhotos || [],
+                  itemSpecifics: sourceData.item_specifics || sourceData.itemSpecifics || {},
+                  listingType: listing.listingType?.type || listing.listingType || 'GENERAL_LISTING',
+                  // Include all book-specific fields if they exist in edited data
+                  ...(editedData && {
+                    author: editedData.author,
+                    bookTitle: editedData.bookTitle,
+                    isbn: editedData.isbn,
+                    format: editedData.format,
+                    publisher: editedData.publisher,
+                    publicationYear: editedData.publicationYear,
+                    topic: editedData.topic,
+                    edition: editedData.edition
+                  })
+                };
+              });
               
               const result = await postAllListings(listingsToPost);
               
@@ -200,6 +232,34 @@ export default function Results({ listings = [], onClearAll, loading = false, er
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled={true}
       >
+        {/* Show processing listings first */}
+        {processingListings.map((processingItem) => (
+          <View key={processingItem.id} style={styles.processingCard}>
+            <View style={styles.processingContent}>
+              <ActivityIndicator 
+                size="large" 
+                color={colors.primary} 
+                style={styles.processingSpinner} 
+              />
+              <View style={styles.processingText}>
+                <Text style={styles.processingTitle}>🤖 Creating listing...</Text>
+                <Text style={styles.processingSubtitle}>
+                  Analyzing photos with AI • Please wait
+                </Text>
+                <Text style={styles.processingType}>
+                  {processingItem.listingType === 'BOOK_ITEM' ? '📚 Book Listing' : 
+                   processingItem.listingType === 'BOOK_LOTS' ? '📚 Book Lots' : 
+                   processingItem.listingType === 'CD_MUSIC' ? '🎵 CD/Music' : 
+                   processingItem.listingType === 'DVD_MOVIE' ? '🎬 DVD/Movie' : 
+                   processingItem.listingType === 'VHS_LISTING' ? '📼 VHS' : 
+                   '📦 General Item'}
+                </Text>
+              </View>
+            </View>
+          </View>
+        ))}
+
+        {/* Show completed listings */}
         {listings.map((listing) => {
           // Determine if this is a book listing
           const isBook = listing.listingType?.type === 'BOOK_ITEM' || 
@@ -378,5 +438,40 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textMuted,
     fontStyle: 'italic',
+  },
+  processingCard: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: borderRadius.lg,
+    borderWidth: 2,
+    borderColor: colors.primary + '40',
+    margin: spacing.md,
+    ...shadows.sm,
+  },
+  processingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  processingSpinner: {
+    marginRight: spacing.lg,
+  },
+  processingText: {
+    flex: 1,
+  },
+  processingTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.primary,
+    marginBottom: spacing.xs,
+  },
+  processingSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  processingType: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontWeight: '500',
   },
 });
