@@ -1,82 +1,230 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { usePhotos } from "../contexts/PhotoContext";
 import { analyzePhotos } from "../services/listingApi";
+import { parseListingResponse } from "../utils/responseParser";
+import { testServerConnection } from "../services/testConnection";
+import { AI_PROMPTS } from "../constants/prompts";
 
-export default function CameraCapture() {
-  const [photosPerListing, setPhotosPerListing] = useState(3);
+export default function CameraCapture({ 
+  selectedListingType, 
+  onCreateListing, 
+  onStartProcessing, 
+  onPhotoClear 
+}) {
   const [currentPhotoCount, setCurrentPhotoCount] = useState(0);
   const [capturedPhotos, setCapturedPhotos] = useState([]);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [completedListings, setCompletedListings] = useState(0);
 
-  const { addPhotos } = usePhotos();
+  const { addPhotos, photosPerListing, setPhotosPerListing } = usePhotos();
 
   const handleUseCameraPress = async () => {
+    console.log("📷 Use Camera button pressed - INITIAL STATE:", {
+      capturedPhotosLength: capturedPhotos.length,
+      currentPhotoCount,
+      photosPerListing,
+      photosPerListingType: typeof photosPerListing,
+      completedListings
+    });
+    console.log("📷 CONTEXT PHOTO STATE:", { photosPerListing });
+
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     
     if (status === "granted") {
+      console.log("📷 Camera permission granted, resetting state and starting");
       setCurrentPhotoCount(0);
       setCapturedPhotos([]);
       takeNextPhoto();
+    } else {
+      console.log("📷 Camera permission denied");
     }
   };
 
-  const takeNextPhoto = async () => {
+  const takeNextPhoto = useCallback(async () => {
+    console.log("📸 takeNextPhoto called - STATE CHECK:", {
+      capturedPhotosLength: capturedPhotos.length,
+      currentPhotoCount,
+      photosPerListing
+    });
+
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.8,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
+      console.log("📸 Photo captured successfully");
       const newPhoto = result.assets[0];
-      const updatedPhotos = [...capturedPhotos, newPhoto];
-      const newPhotoCount = updatedPhotos.length;
+      console.log("📸 PHOTO LOCATION:", {
+        uri: newPhoto.uri,
+        width: newPhoto.width,
+        height: newPhoto.height,
+        fileName: newPhoto.fileName,
+        fileSize: newPhoto.fileSize
+      });
       
-      setCapturedPhotos(updatedPhotos);
-      setCurrentPhotoCount(newPhotoCount);
+      // Use functional updates to ensure we get the latest state
+      setCapturedPhotos(currentPhotos => {
+        const updatedPhotos = [...currentPhotos, newPhoto];
+        const newPhotoCount = updatedPhotos.length;
+        
+        console.log("📸 FUNCTIONAL UPDATE:", {
+          oldCapturedPhotosLength: currentPhotos.length,
+          newPhotoCount,
+          photosPerListing,
+          photosPerListingType: typeof photosPerListing,
+          willContinue: newPhotoCount < photosPerListing,
+          comparison: `${newPhotoCount} < ${photosPerListing} = ${newPhotoCount < photosPerListing}`
+        });
 
-      if (newPhotoCount < photosPerListing) {
-        setTimeout(() => takeNextPhoto(), 1000);
-      } else {
-        generateListingFromPhotos(updatedPhotos);
-      }
+        setCurrentPhotoCount(newPhotoCount);
+
+        if (newPhotoCount < photosPerListing) {
+          console.log("📸 Need more photos, scheduling next photo in 500ms");
+          setTimeout(() => takeNextPhoto(), 500);
+        } else {
+          console.log("📸 Target reached, generating listing automatically");
+          
+          // Add photos to context with proper IDs for UI display
+          const photosWithId = updatedPhotos.map(photo => ({
+            uri: photo.uri,
+            width: photo.width,
+            height: photo.height,
+            id: Math.random().toString(36).substr(2, 9),
+          }));
+          
+          // Move addPhotos and other side effects outside the functional update
+          setTimeout(() => {
+            addPhotos(photosWithId);
+            
+            // Automatically trigger listing generation if we have a selected type
+            console.log("📸 CHECKING AUTO-LISTING CONDITIONS:", {
+              selectedListingType: selectedListingType,
+              hasOnCreateListing: !!onCreateListing,
+              hasOnStartProcessing: !!onStartProcessing,
+              hasOnPhotoClear: !!onPhotoClear,
+              photosWithIdLength: photosWithId.length
+            });
+            
+            if (selectedListingType && onCreateListing && onStartProcessing && onPhotoClear) {
+              console.log("✅ All conditions met, calling triggerAutomaticListingGeneration");
+              triggerAutomaticListingGeneration(photosWithId);
+            } else {
+              console.log("❌ Auto-listing disabled - missing props or selectedListingType:", {
+                selectedListingType: selectedListingType,
+                onCreateListing: !!onCreateListing,
+                onStartProcessing: !!onStartProcessing,
+                onPhotoClear: !!onPhotoClear
+              });
+              setCompletedListings(prev => prev + 1);
+            }
+          }, 0);
+          
+          // Reset and continue for next listing
+          setTimeout(() => {
+            setCapturedPhotos([]);
+            setCurrentPhotoCount(0);
+            takeNextPhoto();
+          }, 1000);
+        }
+        
+        return updatedPhotos;
+      });
+    } else {
+      console.log("📸 Photo was canceled or failed");
     }
-  };
+  }, [capturedPhotos, currentPhotoCount, photosPerListing]);
 
-  const generateListingFromPhotos = async (photos) => {
+  const triggerAutomaticListingGeneration = async (photos) => {
     try {
-      setIsGenerating(true);
-      console.log("Generating listing from photos:", photos.length);
+      console.log("🤖 AUTO-LISTING FUNCTION CALLED! Triggering listing generation for", photos.length, "photos");
+      console.log("🤖 Props check:", {
+        selectedListingType,
+        hasOnCreateListing: !!onCreateListing,
+        hasOnStartProcessing: !!onStartProcessing,
+        hasOnPhotoClear: !!onPhotoClear
+      });
+      
+      // Start processing indicator and clear photos immediately (like CreateListingButton does)
+      let processingId = null;
+      if (onStartProcessing) {
+        processingId = onStartProcessing();
+      }
+      if (onPhotoClear) {
+        onPhotoClear();
+      }
 
-      const photosWithId = photos.map(photo => ({
-        uri: photo.uri,
-        width: photo.width,
-        height: photo.height,
-        id: Math.random().toString(36).substr(2, 9),
-      }));
+      // Test server connection
+      console.log('🔍 Testing server connection...');
+      const connectionTest = await testServerConnection();
+      if (!connectionTest.success) {
+        throw new Error('Cannot connect to server: ' + connectionTest.error);
+      }
+      console.log('✅ Server connection successful!');
 
-      const prompt = `Please analyze these ${photos.length} photos and create a detailed eBay listing. Include title, description, condition, and suggested starting price.`;
+      // Get the appropriate prompt based on listing type (same logic as CreateListingButton)
+      let prompt;
+      switch (selectedListingType) {
+        case 'BOOK_ITEM':
+          prompt = AI_PROMPTS.BOOK_ITEM(photos.length);
+          break;
+        case 'BOOK_LOTS':
+          prompt = AI_PROMPTS.BOOK_ITEM(photos.length);
+          break;
+        case 'CD_MUSIC':
+          prompt = AI_PROMPTS.ELECTRONICS;
+          break;
+        case 'DVD_MOVIE':
+          prompt = AI_PROMPTS.ELECTRONICS;
+          break;
+        case 'VHS_LISTING':
+          prompt = AI_PROMPTS.ELECTRONICS;
+          break;
+        case 'GENERAL_LISTING':
+          prompt = AI_PROMPTS.GENERAL_ITEM;
+          break;
+        default:
+          prompt = AI_PROMPTS.GENERAL_ITEM;
+      }
 
+      console.log('🤖 Creating listing with type:', selectedListingType);
+      
+      // Call the analyze endpoint (same as CreateListingButton)
       const result = await analyzePhotos({
-        photos: photosWithId,
-        listingType: 'auto',
+        photos,
+        listingType: selectedListingType,
         prompt
       });
 
-      console.log("Listing generated successfully:", result);
-      
-      // Add photos to context for display
-      addPhotos(photosWithId);
-      
-      // Reset for next listing
-      setCapturedPhotos([]);
-      setCurrentPhotoCount(0);
-      
+      console.log('✅ Raw OpenAI Response:', result);
+
+      // Parse the response based on listing type (same as CreateListingButton)
+      const parsedListing = parseListingResponse(result.rawResponse, selectedListingType);
+      console.log('✅ Parsed Listing:', JSON.stringify(parsedListing, null, 2));
+
+      // Pass results to parent component (same as CreateListingButton)
+      if (onCreateListing) {
+        onCreateListing({
+          photos,
+          hostedPhotos: result.hostedPhotos || [],
+          listingType: selectedListingType,
+          prompt,
+          photoCount: photos.length,
+          rawResponse: result,
+          parsedListing
+        }, processingId);
+      }
+
+      setCompletedListings(prev => prev + 1);
+
     } catch (error) {
-      console.error("Failed to generate listing:", error);
-    } finally {
-      setIsGenerating(false);
+      console.error('❌ Error in automatic listing generation:', error);
+      
+      // Remove processing indicator on error (same as CreateListingButton)
+      if (onCreateListing) {
+        onCreateListing({ error: error.message }, processingId);
+      }
     }
   };
 
@@ -89,7 +237,7 @@ export default function CameraCapture() {
         <Text style={styles.useCameraButtonText}>📷 Use Camera</Text>
       </TouchableOpacity>
 
-      {currentPhotoCount > 0 && !isGenerating && (
+      {currentPhotoCount > 0 && (
         <View style={styles.statusContainer}>
           <Text style={styles.statusText}>
             Photo {currentPhotoCount} of {photosPerListing} taken
@@ -97,9 +245,11 @@ export default function CameraCapture() {
         </View>
       )}
 
-      {isGenerating && (
-        <View style={styles.generatingContainer}>
-          <Text style={styles.generatingText}>🔄 Generating listing...</Text>
+      {completedListings > 0 && (
+        <View style={styles.completedContainer}>
+          <Text style={styles.completedText}>
+            ✅ {completedListings} listing{completedListings !== 1 ? "s" : ""} generated
+          </Text>
         </View>
       )}
 
@@ -192,17 +342,17 @@ const styles = StyleSheet.create({
     color: "#1976d2",
     fontWeight: "600",
   },
-  generatingContainer: {
+  completedContainer: {
     marginTop: 15,
     padding: 12,
-    backgroundColor: "#fff3cd",
+    backgroundColor: "#d4edda",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#ffeaa7",
+    borderColor: "#c3e6cb",
   },
-  generatingText: {
+  completedText: {
     fontSize: 16,
-    color: "#856404",
+    color: "#155724",
     fontWeight: "600",
   },
 });

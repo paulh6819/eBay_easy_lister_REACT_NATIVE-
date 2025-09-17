@@ -115,17 +115,23 @@ export default function PhotoUploadScreen({ navigation }) {
           <BatchControls />
         </View>
 
-        <CameraCapture />
+        <CameraCapture 
+          selectedListingType={selectedListingType}
+          onCreateListing={handleCreateListing}
+          onStartProcessing={handleStartProcessing}
+          onPhotoClear={clearPhotos}
+        />
         
         <PhotoUploader />
+        
+        <ListingTypeSelector 
+          onSelectionChange={handleListingTypeChange}
+          initialValue={selectedListingType}
+        />
         
         {uploadedPhotos.length > 0 && (
           <>
             <PhotoGroupPreview />
-            <ListingTypeSelector 
-              onSelectionChange={handleListingTypeChange}
-              initialValue={selectedListingType}
-            />
           </>
         )}
 
