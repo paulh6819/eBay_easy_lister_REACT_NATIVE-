@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Image, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, ScrollView, Image, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { colors, spacing, borderRadius, shadows } from '../constants/colors';
+import { getRandomPostingMessage } from '../constants/loadingMessages';
 
 /**
  * EditableListingCard - A form-based listing card where everything is editable with touch
@@ -11,6 +12,7 @@ import { colors, spacing, borderRadius, shadows } from '../constants/colors';
  */
 export default function EditableListingCard({ listing, onPost, onDataChange }) {
   const [isPosting, setIsPosting] = useState(false);
+  const [postingMessage, setPostingMessage] = useState('');
   
   // Debug logging
   console.log('🔍 EditableListingCard received listing:', {
@@ -64,6 +66,7 @@ export default function EditableListingCard({ listing, onPost, onDataChange }) {
     if (isPosting || !onPost) return;
     
     setIsPosting(true);
+    setPostingMessage(getRandomPostingMessage());
     try {
       // Include all necessary data for posting, preserving hostedPhotos from original listing
       const postData = {
@@ -93,6 +96,21 @@ export default function EditableListingCard({ listing, onPost, onDataChange }) {
 
   return (
     <View style={styles.container}>
+      {/* Loading Overlay */}
+      {isPosting && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingContent}>
+            <ActivityIndicator 
+              size="large" 
+              color={colors.primary} 
+              style={styles.loadingSpinner} 
+            />
+            <Text style={styles.loadingMessage}>{postingMessage}</Text>
+            <Text style={styles.loadingSubtext}>Posting to eBay • Please wait</Text>
+          </View>
+        </View>
+      )}
+
       {/* Top section - Photos, Title, Price, Condition (keep as display) */}
       <ScrollView horizontal style={styles.photoContainer} showsHorizontalScrollIndicator={false}>
         {listingData.photos.map((photo, index) => (
@@ -441,5 +459,36 @@ const styles = StyleSheet.create({
     color: colors.error || '#e74c3c',
     marginTop: spacing.xs,
     fontWeight: '500',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+    borderRadius: borderRadius.lg,
+  },
+  loadingContent: {
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  loadingSpinner: {
+    marginBottom: spacing.lg,
+  },
+  loadingMessage: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.primary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
 });

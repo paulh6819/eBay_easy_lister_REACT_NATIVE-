@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { colors, spacing, borderRadius, shadows } from '../constants/colors';
+import { getRandomProcessingMessage } from '../constants/loadingMessages';
 import EditableListingCard from './EditableListingCard';
 import BookListingCard from './BookListingCard';
 import { postAllListings, postSingleListing } from '../services/ebayPostingService';
@@ -52,7 +53,7 @@ export default function Results({ listings = [], processingListings = [], onClea
     );
   }
 
-  if (listings.length === 0) {
+  if (listings.length === 0 && processingListings.length === 0) {
     return (
       <View style={styles.container}>
         <View style={styles.emptyCard}>
@@ -242,9 +243,9 @@ export default function Results({ listings = [], processingListings = [], onClea
                 style={styles.processingSpinner} 
               />
               <View style={styles.processingText}>
-                <Text style={styles.processingTitle}>🤖 Creating listing...</Text>
+                <Text style={styles.processingTitle}>{processingItem.message}</Text>
                 <Text style={styles.processingSubtitle}>
-                  Analyzing photos with AI • Please wait
+                  Please wait while we work our magic
                 </Text>
                 <Text style={styles.processingType}>
                   {processingItem.listingType === 'BOOK_ITEM' ? '📚 Book Listing' : 

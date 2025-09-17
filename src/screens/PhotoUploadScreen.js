@@ -3,12 +3,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, ScrollView, TouchableOpacity, Text, StyleSheet, SafeAreaView } from 'react-native';
 import { usePhotos } from '../contexts/PhotoContext';
 import PhotoUploader from '../components/PhotoUploader';
+import CameraCapture from '../components/CameraCapture';
 import BatchControls from '../components/BatchControls';
 import PhotoGroupPreview from '../components/PhotoGroupPreview';
 import ListingTypeSelector from '../components/ListingTypeSelector';
 import CreateListingButton from '../components/CreateListingButton';
 import Results from '../components/Results';
 import { colors, spacing, borderRadius, shadows } from '../constants/colors';
+import { getRandomProcessingMessage } from '../constants/loadingMessages';
 
 export default function PhotoUploadScreen({ navigation }) {
   const { uploadedPhotos, photosPerListing, clearPhotos } = usePhotos();
@@ -47,7 +49,8 @@ export default function PhotoUploadScreen({ navigation }) {
       id: processingId,
       timestamp: new Date().toISOString(),
       status: 'processing',
-      listingType: selectedListingType
+      listingType: selectedListingType,
+      message: getRandomProcessingMessage() // Generate unique message for each processing item
     };
     
     setProcessingListings(prev => [...prev, processingItem]);
@@ -112,6 +115,8 @@ export default function PhotoUploadScreen({ navigation }) {
           <BatchControls />
         </View>
 
+        <CameraCapture />
+        
         <PhotoUploader />
         
         {uploadedPhotos.length > 0 && (
