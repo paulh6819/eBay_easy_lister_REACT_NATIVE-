@@ -20,10 +20,12 @@ export default function CreateListingButton({
   onPress, 
   onPhotoClear,
   onStartProcessing,
+  photosPerListing = 3,
   disabled = false 
 }) {
   const [isLoading, setIsLoading] = useState(false);
   const photoCount = photos.length;
+  const listingCount = Math.ceil(photoCount / photosPerListing);
   const canCreateListing = photoCount > 0 && selectedListingType;
 
   const handlePress = async () => {
@@ -125,7 +127,7 @@ export default function CreateListingButton({
     if (isLoading || disabled) {
       return 'Creating Listing...';
     }
-    return `Create Single Listing (${photoCount})`;
+    return listingCount === 1 ? `Create Single Listing (${photoCount})` : `Create ${listingCount} Listings (${photoCount})`;
   };
 
   return (

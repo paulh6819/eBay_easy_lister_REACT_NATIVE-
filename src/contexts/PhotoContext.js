@@ -5,7 +5,7 @@ const PhotoContext = createContext();
 const initialState = {
   uploadedPhotos: [],
   photoGroups: [],
-  photosPerListing: 'auto',
+  photosPerListing: 3,
   isGrouping: false,
 };
 

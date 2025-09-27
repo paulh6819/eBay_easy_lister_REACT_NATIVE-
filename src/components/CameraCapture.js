@@ -1,6 +1,5 @@
-import React, { useState, useCallback } from "react";
+import React, { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
-import * as ImagePicker from "expo-image-picker";
 import { usePhotos } from "../contexts/PhotoContext";
 import { analyzePhotos } from "../services/listingApi";
 import { parseListingResponse } from "../utils/responseParser";
@@ -11,130 +10,28 @@ export default function CameraCapture({
   selectedListingType, 
   onCreateListing, 
   onStartProcessing, 
-  onPhotoClear 
+  onPhotoClear,
+  onShowCamera,
+  onCameraClose 
 }) {
-  const [currentPhotoCount, setCurrentPhotoCount] = useState(0);
-  const [capturedPhotos, setCapturedPhotos] = useState([]);
   const [completedListings, setCompletedListings] = useState(0);
 
   const { addPhotos, photosPerListing, setPhotosPerListing } = usePhotos();
 
-  const handleUseCameraPress = async () => {
+  const handleUseCameraPress = () => {
     console.log("📷 Use Camera button pressed - INITIAL STATE:", {
-      capturedPhotosLength: capturedPhotos.length,
-      currentPhotoCount,
       photosPerListing,
       photosPerListingType: typeof photosPerListing,
       completedListings
     });
     console.log("📷 CONTEXT PHOTO STATE:", { photosPerListing });
 
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    
-    if (status === "granted") {
-      console.log("📷 Camera permission granted, resetting state and starting");
-      setCurrentPhotoCount(0);
-      setCapturedPhotos([]);
-      takeNextPhoto();
-    } else {
-      console.log("📷 Camera permission denied");
+    // Show custom camera
+    if (onShowCamera) {
+      onShowCamera(true);
     }
   };
 
-  const takeNextPhoto = useCallback(async () => {
-    console.log("📸 takeNextPhoto called - STATE CHECK:", {
-      capturedPhotosLength: capturedPhotos.length,
-      currentPhotoCount,
-      photosPerListing
-    });
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      console.log("📸 Photo captured successfully");
-      const newPhoto = result.assets[0];
-      console.log("📸 PHOTO LOCATION:", {
-        uri: newPhoto.uri,
-        width: newPhoto.width,
-        height: newPhoto.height,
-        fileName: newPhoto.fileName,
-        fileSize: newPhoto.fileSize
-      });
-      
-      // Use functional updates to ensure we get the latest state
-      setCapturedPhotos(currentPhotos => {
-        const updatedPhotos = [...currentPhotos, newPhoto];
-        const newPhotoCount = updatedPhotos.length;
-        
-        console.log("📸 FUNCTIONAL UPDATE:", {
-          oldCapturedPhotosLength: currentPhotos.length,
-          newPhotoCount,
-          photosPerListing,
-          photosPerListingType: typeof photosPerListing,
-          willContinue: newPhotoCount < photosPerListing,
-          comparison: `${newPhotoCount} < ${photosPerListing} = ${newPhotoCount < photosPerListing}`
-        });
-
-        setCurrentPhotoCount(newPhotoCount);
-
-        if (newPhotoCount < photosPerListing) {
-          console.log("📸 Need more photos, scheduling next photo in 500ms");
-          setTimeout(() => takeNextPhoto(), 500);
-        } else {
-          console.log("📸 Target reached, generating listing automatically");
-          
-          // Add photos to context with proper IDs for UI display
-          const photosWithId = updatedPhotos.map(photo => ({
-            uri: photo.uri,
-            width: photo.width,
-            height: photo.height,
-            id: Math.random().toString(36).substr(2, 9),
-          }));
-          
-          // Move addPhotos and other side effects outside the functional update
-          setTimeout(() => {
-            addPhotos(photosWithId);
-            
-            // Automatically trigger listing generation if we have a selected type
-            console.log("📸 CHECKING AUTO-LISTING CONDITIONS:", {
-              selectedListingType: selectedListingType,
-              hasOnCreateListing: !!onCreateListing,
-              hasOnStartProcessing: !!onStartProcessing,
-              hasOnPhotoClear: !!onPhotoClear,
-              photosWithIdLength: photosWithId.length
-            });
-            
-            if (selectedListingType && onCreateListing && onStartProcessing && onPhotoClear) {
-              console.log("✅ All conditions met, calling triggerAutomaticListingGeneration");
-              triggerAutomaticListingGeneration(photosWithId);
-            } else {
-              console.log("❌ Auto-listing disabled - missing props or selectedListingType:", {
-                selectedListingType: selectedListingType,
-                onCreateListing: !!onCreateListing,
-                onStartProcessing: !!onStartProcessing,
-                onPhotoClear: !!onPhotoClear
-              });
-              setCompletedListings(prev => prev + 1);
-            }
-          }, 0);
-          
-          // Reset and continue for next listing
-          setTimeout(() => {
-            setCapturedPhotos([]);
-            setCurrentPhotoCount(0);
-            takeNextPhoto();
-          }, 1000);
-        }
-        
-        return updatedPhotos;
-      });
-    } else {
-      console.log("📸 Photo was canceled or failed");
-    }
-  }, [capturedPhotos, currentPhotoCount, photosPerListing]);
 
   const triggerAutomaticListingGeneration = async (photos) => {
     try {
@@ -237,13 +134,6 @@ export default function CameraCapture({
         <Text style={styles.useCameraButtonText}>📷 Use Camera</Text>
       </TouchableOpacity>
 
-      {currentPhotoCount > 0 && (
-        <View style={styles.statusContainer}>
-          <Text style={styles.statusText}>
-            Photo {currentPhotoCount} of {photosPerListing} taken
-          </Text>
-        </View>
-      )}
 
       {completedListings > 0 && (
         <View style={styles.completedContainer}>
@@ -275,6 +165,7 @@ export default function CameraCapture({
           ))}
         </ScrollView>
       </View>
+
     </View>
   );
 }

@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { View, ScrollView, TouchableOpacity, Text, StyleSheet, SafeAreaView } from 'react-native';
+import { View, ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../contexts/PhotoContext';
+import { analyzePhotos } from '../services/listingApi';
+import { parseListingResponse } from '../utils/responseParser';
+import { testServerConnection } from '../services/testConnection';
+import { AI_PROMPTS } from '../constants/prompts';
 import PhotoUploader from '../components/PhotoUploader';
 import CameraCapture from '../components/CameraCapture';
+import CustomCamera from '../components/CustomCamera';
 import BatchControls from '../components/BatchControls';
 import PhotoGroupPreview from '../components/PhotoGroupPreview';
 import ListingTypeSelector from '../components/ListingTypeSelector';
@@ -13,10 +19,13 @@ import { colors, spacing, borderRadius, shadows } from '../constants/colors';
 import { getRandomProcessingMessage } from '../constants/loadingMessages';
 
 export default function PhotoUploadScreen({ navigation }) {
-  const { uploadedPhotos, photosPerListing, clearPhotos } = usePhotos();
+  const { uploadedPhotos, photosPerListing, clearPhotos, addPhotos } = usePhotos();
   const [selectedListingType, setSelectedListingType] = useState(null);
   const [generatedListings, setGeneratedListings] = useState([]);
   const [processingListings, setProcessingListings] = useState([]);
+  const [showCustomCamera, setShowCustomCamera] = useState(false);
+  const [currentPhotoCount, setCurrentPhotoCount] = useState(0);
+  const [capturedPhotos, setCapturedPhotos] = useState([]);
 
   // Load saved listing type from AsyncStorage on component mount
   useEffect(() => {
@@ -103,6 +112,161 @@ export default function PhotoUploadScreen({ navigation }) {
     console.log('🗑️ Cleared all generated listings');
   };
 
+  const handleShowCamera = (show) => {
+    setShowCustomCamera(show);
+    if (show) {
+      setCurrentPhotoCount(0);
+      setCapturedPhotos([]);
+    }
+  };
+
+  const handleCameraClose = () => {
+    setShowCustomCamera(false);
+  };
+
+  const triggerAutomaticListingGeneration = async (photos) => {
+    try {
+      console.log("🤖 AUTO-LISTING FUNCTION CALLED! Triggering listing generation for", photos.length, "photos");
+      console.log("🤖 Props check:", {
+        selectedListingType,
+        hasHandleCreateListing: !!handleCreateListing,
+        hasHandleStartProcessing: !!handleStartProcessing,
+        hasClearPhotos: !!clearPhotos
+      });
+      
+      // Start processing indicator and clear photos immediately (like CreateListingButton does)
+      let processingId = null;
+      if (handleStartProcessing) {
+        processingId = handleStartProcessing();
+      }
+      if (clearPhotos) {
+        clearPhotos();
+      }
+
+      // Test server connection
+      console.log('🔍 Testing server connection...');
+      const connectionTest = await testServerConnection();
+      if (!connectionTest.success) {
+        throw new Error('Cannot connect to server: ' + connectionTest.error);
+      }
+      console.log('✅ Server connection successful!');
+
+      // Get the appropriate prompt based on listing type (same logic as CreateListingButton)
+      let prompt;
+      switch (selectedListingType) {
+        case 'BOOK_ITEM':
+          prompt = AI_PROMPTS.BOOK_ITEM(photos.length);
+          break;
+        case 'BOOK_LOTS':
+          prompt = AI_PROMPTS.BOOK_ITEM(photos.length);
+          break;
+        case 'CD_MUSIC':
+          prompt = AI_PROMPTS.ELECTRONICS;
+          break;
+        case 'DVD_MOVIE':
+          prompt = AI_PROMPTS.ELECTRONICS;
+          break;
+        case 'VHS_LISTING':
+          prompt = AI_PROMPTS.ELECTRONICS;
+          break;
+        case 'GENERAL_LISTING':
+          prompt = AI_PROMPTS.GENERAL_ITEM;
+          break;
+        default:
+          prompt = AI_PROMPTS.GENERAL_ITEM;
+      }
+
+      console.log('🤖 Creating listing with type:', selectedListingType);
+      
+      // Call the analyze endpoint (same as CreateListingButton)
+      const result = await analyzePhotos({
+        photos,
+        listingType: selectedListingType,
+        prompt
+      });
+
+      console.log('✅ Raw OpenAI Response:', result);
+
+      // Parse the response based on listing type (same as CreateListingButton)
+      const parsedListing = parseListingResponse(result.rawResponse, selectedListingType);
+      console.log('✅ Parsed Listing:', JSON.stringify(parsedListing, null, 2));
+
+      // Pass results to parent component (same as CreateListingButton)
+      if (handleCreateListing) {
+        handleCreateListing({
+          photos,
+          hostedPhotos: result.hostedPhotos || [],
+          listingType: selectedListingType,
+          prompt,
+          photoCount: photos.length,
+          rawResponse: result,
+          parsedListing
+        }, processingId);
+      }
+
+    } catch (error) {
+      console.error('❌ Error in automatic listing generation:', error);
+      
+      // Remove processing indicator on error (same as CreateListingButton)
+      if (handleCreateListing) {
+        handleCreateListing({ error: error.message }, processingId);
+      }
+    }
+  };
+
+  const handlePhotoTaken = (photo) => {
+    const newPhoto = {
+      uri: photo.uri,
+      width: photo.width,
+      height: photo.height,
+      fileName: `photo_${Date.now()}.jpg`,
+      fileSize: photo.fileSize || null
+    };
+
+    setCapturedPhotos(currentPhotos => {
+      const updatedPhotos = [...currentPhotos, newPhoto];
+      const newPhotoCount = updatedPhotos.length;
+      
+      setCurrentPhotoCount(newPhotoCount);
+
+      if (newPhotoCount >= photosPerListing) {
+        console.log("📸 Target reached, generating listing automatically");
+        
+        // Close camera and process photos
+        setShowCustomCamera(false);
+        
+        // Add photos to context with proper IDs for UI display
+        const photosWithId = updatedPhotos.map(photo => ({
+          uri: photo.uri,
+          width: photo.width,
+          height: photo.height,
+          id: Math.random().toString(36).substr(2, 9),
+        }));
+        
+        // Process listing generation
+        setTimeout(() => {
+          addPhotos(photosWithId);
+          
+          if (selectedListingType && handleCreateListing && handleStartProcessing && clearPhotos) {
+            console.log("✅ All conditions met, calling triggerAutomaticListingGeneration");
+            triggerAutomaticListingGeneration(photosWithId);
+          } else {
+            console.log("❌ Auto-listing disabled - missing props or selectedListingType");
+          }
+        }, 100);
+        
+        // Reset and continue for next listing
+        setTimeout(() => {
+          setCapturedPhotos([]);
+          setCurrentPhotoCount(0);
+          setShowCustomCamera(true); // Show camera again for next batch
+        }, 2000);
+      }
+      
+      return updatedPhotos;
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollContainer}>
@@ -120,6 +284,8 @@ export default function PhotoUploadScreen({ navigation }) {
           onCreateListing={handleCreateListing}
           onStartProcessing={handleStartProcessing}
           onPhotoClear={clearPhotos}
+          onShowCamera={handleShowCamera}
+          onCameraClose={handleCameraClose}
         />
         
         <PhotoUploader />
@@ -160,9 +326,19 @@ export default function PhotoUploadScreen({ navigation }) {
             onPress={handleCreateListing}
             onPhotoClear={clearPhotos}
             onStartProcessing={handleStartProcessing}
+            photosPerListing={photosPerListing}
           />
         </View>
       )}
+
+      {/* Full-Screen Custom Camera - Rendered outside ScrollView */}
+      <CustomCamera
+        isVisible={showCustomCamera}
+        onPhotoTaken={handlePhotoTaken}
+        onClose={handleCameraClose}
+        currentPhotoCount={currentPhotoCount}
+        totalPhotos={photosPerListing}
+      />
     </SafeAreaView>
   );
 }
