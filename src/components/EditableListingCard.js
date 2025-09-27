@@ -140,7 +140,6 @@ export default function EditableListingCard({ listing, onPost, onDataChange }) {
             multiline
             numberOfLines={2}
             placeholder="Enter listing title"
-            maxLength={80}
           />
           {listingData.title.length > 80 && (
             <Text style={styles.errorText}>

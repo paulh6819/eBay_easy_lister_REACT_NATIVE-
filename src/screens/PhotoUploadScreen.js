@@ -26,6 +26,7 @@ export default function PhotoUploadScreen({ navigation }) {
   const [showCustomCamera, setShowCustomCamera] = useState(false);
   const [currentPhotoCount, setCurrentPhotoCount] = useState(0);
   const [capturedPhotos, setCapturedPhotos] = useState([]);
+  const [isGeneratingInBackground, setIsGeneratingInBackground] = useState(false);
 
   // Load saved listing type from AsyncStorage on component mount
   useEffect(() => {
@@ -230,10 +231,10 @@ export default function PhotoUploadScreen({ navigation }) {
       setCurrentPhotoCount(newPhotoCount);
 
       if (newPhotoCount >= photosPerListing) {
-        console.log("📸 Target reached, generating listing automatically");
+        console.log("📸 Target reached, generating listing automatically in background");
         
-        // Close camera and process photos
-        setShowCustomCamera(false);
+        // Start background generation animation (don't close camera)
+        setIsGeneratingInBackground(true);
         
         // Add photos to context with proper IDs for UI display
         const photosWithId = updatedPhotos.map(photo => ({
@@ -243,7 +244,7 @@ export default function PhotoUploadScreen({ navigation }) {
           id: Math.random().toString(36).substr(2, 9),
         }));
         
-        // Process listing generation
+        // Process listing generation in background
         setTimeout(() => {
           addPhotos(photosWithId);
           
@@ -255,12 +256,12 @@ export default function PhotoUploadScreen({ navigation }) {
           }
         }, 100);
         
-        // Reset and continue for next listing
+        // Reset photo count and continue for next listing after generation starts
         setTimeout(() => {
           setCapturedPhotos([]);
           setCurrentPhotoCount(0);
-          setShowCustomCamera(true); // Show camera again for next batch
-        }, 2000);
+          setIsGeneratingInBackground(false); // Stop the animation
+        }, 3000); // Give a bit more time for user to see the generation message
       }
       
       return updatedPhotos;
@@ -338,6 +339,7 @@ export default function PhotoUploadScreen({ navigation }) {
         onClose={handleCameraClose}
         currentPhotoCount={currentPhotoCount}
         totalPhotos={photosPerListing}
+        isGeneratingInBackground={isGeneratingInBackground}
       />
     </SafeAreaView>
   );

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert, Animated } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -9,17 +10,75 @@ export default function CustomCamera({
   onClose,
   currentPhotoCount = 0,
   totalPhotos = 3,
-  isVisible = false 
+  isVisible = false,
+  isGeneratingInBackground = false
 }) {
   const [facing, setFacing] = useState('back');
   const [permission, requestPermission] = useCameraPermissions();
+  const [listingsGenerated, setListingsGenerated] = useState(0);
   const cameraRef = useRef(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
     if (isVisible && !permission?.granted) {
       requestPermission();
     }
   }, [isVisible, permission]);
+
+  // Check haptics availability on mount
+  useEffect(() => {
+    const checkHaptics = async () => {
+      try {
+        console.log('🔍 Checking haptics availability...');
+        // Try to get haptic capabilities
+        const hasHaptics = await Haptics.selectionAsync();
+        console.log('✅ Haptics test completed - device supports haptics');
+      } catch (error) {
+        console.error('❌ Haptics not available on this device:', error);
+      }
+    };
+    
+    if (isVisible) {
+      checkHaptics();
+    }
+  }, [isVisible]);
+
+  // Track listings generated and handle animation
+  useEffect(() => {
+    if (isGeneratingInBackground) {
+      // Increment listing counter when generation starts
+      setListingsGenerated(prev => prev + 1);
+      
+      // Fade in and scale up animation
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        })
+      ]).start();
+    } else {
+      // Fade out and scale down animation
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 0.8,
+          duration: 300,
+          useNativeDriver: true,
+        })
+      ]).start();
+    }
+  }, [isGeneratingInBackground]);
 
   if (!permission) {
     return <View />;
@@ -39,10 +98,22 @@ export default function CustomCamera({
   const takePhoto = async () => {
     if (cameraRef.current) {
       try {
+        console.log('📸 Taking photo - attempting haptic feedback...');
+        
+        // Add heavy haptic feedback when taking photo
+        try {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          console.log('✅ Haptic feedback triggered successfully');
+        } catch (hapticError) {
+          console.error('❌ Haptic feedback failed:', hapticError);
+        }
+        
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.8,
           base64: false,
         });
+        
+        console.log('📸 Photo taken successfully');
         
         if (onPhotoTaken) {
           onPhotoTaken(photo);
@@ -87,6 +158,21 @@ export default function CustomCamera({
             ))}
           </View>
         </View>
+
+        {/* Background Generation Message */}
+        <Animated.View 
+          style={[
+            styles.generationMessage,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }]
+            }
+          ]}
+        >
+          <Text style={styles.generationMessageText}>
+            🤖 Listing #{listingsGenerated} generating! Keep going!
+          </Text>
+        </Animated.View>
 
         {/* Camera Controls */}
         <View style={styles.controlsContainer}>
@@ -252,5 +338,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+  },
+  generationMessage: {
+    position: 'absolute',
+    top: 120,
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+    zIndex: 15,
+  },
+  generationMessageText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    backgroundColor: 'rgba(40, 167, 69, 0.9)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    textAlign: 'center',
+    borderWidth: 2,
+    borderColor: '#28a745',
   },
 });

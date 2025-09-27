@@ -191,7 +191,6 @@ export default function BookListingCard({ listing, onPost, onDataChange }) {
             onChangeText={(text) => handleFieldChange('title', text)}
             placeholder="Enter book title with author"
             multiline
-            maxLength={80}
           />
           {bookData.title.length > 80 && (
             <Text style={styles.errorText}>
