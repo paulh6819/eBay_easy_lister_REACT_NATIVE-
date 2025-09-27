@@ -6,6 +6,8 @@ import EditableListingCard from './EditableListingCard';
 import BookListingCard from './BookListingCard';
 import { postAllListings, postSingleListing } from '../services/ebayPostingService';
 import { postBookToEbay } from '../services/bookListingService';
+import EbayErrorHandler from './EbayErrorHandler';
+import { useEbayError } from '../hooks/useEbayError';
 
 /**
  * Results component for displaying OpenAI generated listings
@@ -18,6 +20,7 @@ import { postBookToEbay } from '../services/bookListingService';
  */
 export default function Results({ listings = [], processingListings = [], onClearAll, loading = false, error = null }) {
   const [postingAll, setPostingAll] = useState(false);
+  const { error: ebayError, isVisible: isEbayErrorVisible, showError: showEbayError, hideError: hideEbayError } = useEbayError();
   
   // Debug logging to understand listing structure
   console.log('📋 Results component received listings:', {
@@ -103,18 +106,25 @@ export default function Results({ listings = [], processingListings = [], onClea
           [{ text: 'OK' }]
         );
       } else {
-        Alert.alert(
-          'Posting Failed',
-          `Failed to post "${listingData.title}": ${result.message}`,
-          [{ text: 'OK' }]
-        );
+        // Use the new eBay error handler for detailed error information
+        console.log('🚨 eBay posting failed with result:', result);
+        showEbayError({
+          error: result.message || result.error || 'Unknown eBay posting error',
+          message: result.message,
+          details: result.details,
+          rawResponse: result.rawResponse,
+          title: listingData.title
+        });
       }
     } catch (error) {
-      Alert.alert(
-        'Error',
-        `An error occurred while posting: ${error.message}`,
-        [{ text: 'OK' }]
-      );
+      // Use the eBay error handler for network/general errors too
+      console.log('🚨 eBay posting exception:', error);
+      showEbayError({
+        error: error.message || 'Network or system error',
+        message: `An error occurred while posting "${listingData.title}"`,
+        details: error.stack,
+        title: listingData.title
+      });
     }
   };
 
@@ -180,18 +190,23 @@ export default function Results({ listings = [], processingListings = [], onClea
                   [{ text: 'OK' }]
                 );
               } else {
-                Alert.alert(
-                  'Batch Posting Failed',
-                  result.message || 'Failed to post listings',
-                  [{ text: 'OK' }]
-                );
+                // Use eBay error handler for batch posting failures
+                console.log('🚨 Batch posting failed with result:', result);
+                showEbayError({
+                  error: result.message || result.error || 'Batch posting failed',
+                  message: result.message || 'Failed to post one or more listings',
+                  details: result.details || result.failedListings?.map(l => `${l.title}: ${l.error}`).join('\n'),
+                  rawResponse: result.rawResponse
+                });
               }
             } catch (error) {
-              Alert.alert(
-                'Error',
-                `Batch posting failed: ${error.message}`,
-                [{ text: 'OK' }]
-              );
+              // Use eBay error handler for batch posting exceptions
+              console.log('🚨 Batch posting exception:', error);
+              showEbayError({
+                error: error.message || 'Network or system error',
+                message: 'Batch posting failed due to a system error',
+                details: error.stack
+              });
             } finally {
               setPostingAll(false);
             }
@@ -318,6 +333,13 @@ export default function Results({ listings = [], processingListings = [], onClea
           }
         })}
       </ScrollView>
+      
+      {/* eBay Error Handler - Shows detailed error information for failed listings */}
+      <EbayErrorHandler
+        error={ebayError}
+        visible={isEbayErrorVisible}
+        onDismiss={hideEbayError}
+      />
     </View>
   );
 }

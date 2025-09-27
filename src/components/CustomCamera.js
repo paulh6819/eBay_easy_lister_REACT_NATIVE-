@@ -26,7 +26,7 @@ export default function CustomCamera({
     }
   }, [isVisible, permission]);
 
-  // Check haptics availability on mount
+  // Check haptics availability and reset listing counter when camera opens/closes
   useEffect(() => {
     const checkHaptics = async () => {
       try {
@@ -41,6 +41,9 @@ export default function CustomCamera({
     
     if (isVisible) {
       checkHaptics();
+      // Reset listings counter when camera opens for a fresh session
+      setListingsGenerated(0);
+      console.log('📸 Camera opened - reset listings counter to 0');
     }
   }, [isVisible]);
 
